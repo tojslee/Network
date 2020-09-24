@@ -66,26 +66,25 @@ int main(){
         FILTER_RULE = "port 53";
     }
     struct bpf_program fcode;
-    printf("1\n");
+    //printf("1\n");
     if(pcap_compile(handle, &fcode, FILTER_RULE, 1, NULL) < 0){
         printf("pcap compile failed\n");
         pcap_freealldevs(allDevs);
         return 0;
     }
 
-    printf("2\n");
+    //printf("2\n");
     if(pcap_setfilter(handle, &fcode) < 0){
         printf("pcap compile failed\n");
         pcap_freealldevs(allDevs);
         return 0;
     }
 
-    printf("3\n");
-    pcap_loop(handle, 0, parsing, NULL);
-    printf("4\n");
-
-
     pcap_freealldevs(allDevs);
+    //printf("3\n");
+    pcap_loop(handle, 0, parsing, NULL);
+    //printf("4\n");
+
     pcap_close(handle);
     return 0;
 }
@@ -100,7 +99,50 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
 */
     // u_char *pkt_data -> packet start address
     if(sniff == 1){ // if packet of HTTP
-        
+        int flag = 0;
+        if(*(pkt_data + 0x36) == 0x47){
+            if(*(pkt_data + 0x37) == 0x45 && *(pkt_data + 0x38) == 0x54){
+                flag = 1;
+            }
+        }
+        else if(*(pkt_data + 0x36) == 0x50 && *(pkt_data + 0x37) == 0x4F && *(pkt_data + 0x38) == 0x53 && *(pkt_data + 0x39) == 0x54){
+            flag = 1;
+        }
+        else if(*(pkt_data + 0x36) == 0x48 && *(pkt_data + 0x37) == 0x54 && *(pkt_data + 0x38) == 0x54 && *(pkt_data + 0x39) == 0x50){
+            flag = 1;
+        }
+
+        if(header->caplen <= 54){
+            flag = 0;
+        }
+
+        if(flag){
+            printf("\n");
+            // calculate port number;
+            int s_port_f = *(pkt_data + 34);
+            int s_port_s = *(pkt_data + 35);
+            int d_port_f = *(pkt_data + 36);
+            int d_port_s = *(pkt_data + 37);
+            int s_port = s_port_f * 256 + s_port_s;
+            int d_port = d_port_f * 256 + d_port_s;
+
+            //print first line
+            printf("%d %d.%d.%d.%d:%d ", no++, *(pkt_data + 26), *(pkt_data + 27), *(pkt_data + 28), *(pkt_data + 29), s_port);
+            printf("%d.%d.%d.%d:%d HTTP ", *(pkt_data + 30), *(pkt_data + 31), *(pkt_data + 32), *(pkt_data + 33), d_port);
+            if(s_port == 80){
+                printf("Response\n");
+            }
+            else if(d_port == 80){
+                printf("Request\n");
+            }
+            
+            for(int i= 0x36;i < header->len;i++){
+                printf("%c", *(pkt_data + i));
+                if(*(pkt_data + i) == 0x0a){
+                    if(*(pkt_data + i-1) == 0x0d && *(pkt_data + i + 1) == 0x0d && *(pkt_data + i + 2) == 0x0a){break;}
+                }
+            }
+        }
     }
     else if(sniff == 2){ // if pack of DNS
         printf("\n");
