@@ -5,6 +5,7 @@ pcap_if_t *allDevs;
 int network; // network variable
 int sniff; // sniff type variable 1:HTTP 2:DNS
 int no = 1;
+int twoOffset = 0;
 
 void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
 
@@ -46,6 +47,10 @@ int main(){
     pcap_if_t *dev = allDevs;
     for(int i=0;i<network-1;i++){
         dev = dev->next;
+    }
+    //printf("%s\n", dev->name);
+    if(strcmp(dev->name, "any") == 0){
+        twoOffset = 1;
     }
 
     pcap_t *handle;
@@ -96,20 +101,31 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
         bpf_u_int32 caplen; capture packet length
         bpf_u_int32 len; real packet length
     }
-*/
+*/  
+    int offsetNum;
+    if(twoOffset){
+        offsetNum = 2;
+    }
+    else{offsetNum = 0;}
+
     // u_char *pkt_data -> packet start address
     if(sniff == 1){ // if packet of HTTP
         int flag = 0;
-        if(*(pkt_data + 0x36) == 0x47){
-            if(*(pkt_data + 0x37) == 0x45 && *(pkt_data + 0x38) == 0x54){
+        
+        //printf("%c%c%c%c\n", *(pkt_data + 0x36 + offsetNum), *(pkt_data + 0x37 + offsetNum),
+        // *(pkt_data + 0x38 + offsetNum), *(pkt_data + 0x39 + offsetNum));
+        if(*(pkt_data + 0x36 + offsetNum) == 0x47){ // GET
+            if(*(pkt_data + 0x37+ offsetNum) == 0x45 && *(pkt_data + 0x38+ offsetNum) == 0x54){
                 flag = 1;
             }
         }
-        else if(*(pkt_data + 0x36) == 0x50 && *(pkt_data + 0x37) == 0x4F && *(pkt_data + 0x38) == 0x53 && *(pkt_data + 0x39) == 0x54){
+        else if(*(pkt_data + 0x36+ offsetNum) == 0x50 && *(pkt_data + 0x37+ offsetNum) == 0x4F && \
+        *(pkt_data + 0x38+ offsetNum) == 0x53 && *(pkt_data + 0x39+ offsetNum) == 0x54){ // POST
             flag = 1;
         }
-        else if(*(pkt_data + 0x36) == 0x48 && *(pkt_data + 0x37) == 0x54 && *(pkt_data + 0x38) == 0x54 && *(pkt_data + 0x39) == 0x50){
-            flag = 1;
+        else if(*(pkt_data + 0x36+ offsetNum) == 0x48 && *(pkt_data + 0x37+ offsetNum) == 0x54 && \
+            *(pkt_data + 0x38+ offsetNum) == 0x54 && *(pkt_data + 0x39+ offsetNum) == 0x50){
+            flag = 1; // HTTP
         }
 
         if(header->caplen <= 54){
@@ -119,16 +135,18 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
         if(flag){
             printf("\n");
             // calculate port number;
-            int s_port_f = *(pkt_data + 34);
-            int s_port_s = *(pkt_data + 35);
-            int d_port_f = *(pkt_data + 36);
-            int d_port_s = *(pkt_data + 37);
+            int s_port_f = *(pkt_data + 34+ offsetNum);
+            int s_port_s = *(pkt_data + 35+ offsetNum);
+            int d_port_f = *(pkt_data + 36+ offsetNum);
+            int d_port_s = *(pkt_data + 37+ offsetNum);
             int s_port = s_port_f * 256 + s_port_s;
             int d_port = d_port_f * 256 + d_port_s;
 
             //print first line
-            printf("%d %d.%d.%d.%d:%d ", no++, *(pkt_data + 26), *(pkt_data + 27), *(pkt_data + 28), *(pkt_data + 29), s_port);
-            printf("%d.%d.%d.%d:%d HTTP ", *(pkt_data + 30), *(pkt_data + 31), *(pkt_data + 32), *(pkt_data + 33), d_port);
+            printf("%d %d.%d.%d.%d:%d ", no++, *(pkt_data + 26+ offsetNum), *(pkt_data + 27+ offsetNum),\
+             *(pkt_data + 28+ offsetNum), *(pkt_data + 29+ offsetNum), s_port);
+            printf("%d.%d.%d.%d:%d HTTP ", *(pkt_data + 30+ offsetNum), *(pkt_data + 31+ offsetNum), \
+                *(pkt_data + 32+ offsetNum), *(pkt_data + 33+ offsetNum), d_port);
             if(s_port == 80){
                 printf("Response\n");
             }
@@ -136,7 +154,7 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
                 printf("Request\n");
             }
             
-            for(int i= 0x36;i < header->len;i++){
+            for(int i= 0x36 + offsetNum;i < header->len;i++){
                 printf("%c", *(pkt_data + i));
                 if(*(pkt_data + i) == 0x0a){
                     if(*(pkt_data + i-1) == 0x0d && *(pkt_data + i + 1) == 0x0d && *(pkt_data + i + 2) == 0x0a){break;}
@@ -148,20 +166,22 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
         printf("\n");
         // only header
         // calculate port number
-        int s_port_f = *(pkt_data + 34);
-        int s_port_s = *(pkt_data + 35);
-        int d_port_f = *(pkt_data + 36);
-        int d_port_s = *(pkt_data + 37);
+        int s_port_f = *(pkt_data + 34+ offsetNum);
+        int s_port_s = *(pkt_data + 35+ offsetNum);
+        int d_port_f = *(pkt_data + 36+ offsetNum);
+        int d_port_s = *(pkt_data + 37+ offsetNum);
         int s_port = s_port_f * 256 + s_port_s;
         int d_port = d_port_f * 256 + d_port_s;
 
         // print first line
-        printf("%d %d.%d.%d.%d:%d ", no++, *(pkt_data + 26), *(pkt_data + 27), *(pkt_data + 28), *(pkt_data + 29), s_port);
-        printf("%d.%d.%d.%d:%d DNS ID : %x%x\n", *(pkt_data + 30), *(pkt_data + 31), *(pkt_data + 32), *(pkt_data + 33), d_port, *(pkt_data + 42), *(pkt_data + 43));
+        printf("%d %d.%d.%d.%d:%d ", no++, *(pkt_data + 26+ offsetNum), *(pkt_data + 27+ offsetNum), \
+            *(pkt_data + 28+ offsetNum), *(pkt_data + 29+ offsetNum), s_port);
+        printf("%d.%d.%d.%d:%d DNS ID : %x%x\n", *(pkt_data + 30+ offsetNum), *(pkt_data + 31+ offsetNum), \
+            *(pkt_data + 32+ offsetNum), *(pkt_data + 33+ offsetNum), d_port, *(pkt_data + 42+ offsetNum), *(pkt_data + 43));
         
         // calculate flag number from decimal to binary
-        int flag_f = *(pkt_data + 44);
-        int flag_s = *(pkt_data + 45);
+        int flag_f = *(pkt_data + 44+ offsetNum);
+        int flag_s = *(pkt_data + 45+ offsetNum);
         int flag = flag_f * 256 + flag_s;
         int binaryFormat[16];
         for(int i=0;i<16;i++){
@@ -178,27 +198,27 @@ void parsing(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_
 
         // print others
         printf("QDCOUNT : ");
-        if(*(pkt_data + 46)){
-            printf("%x%x\n", *(pkt_data + 46), *(pkt_data + 47));
+        if(*(pkt_data + 46 + offsetNum)){
+            printf("%x%x\n", *(pkt_data + 46+ offsetNum), *(pkt_data + 47+ offsetNum));
         }
-        else{printf("%x\n", *(pkt_data + 47));}
+        else{printf("%x\n", *(pkt_data + 47+ offsetNum));}
 
         printf("ANCOUNT : ");
-        if(*(pkt_data + 48)){
-            printf("%x%x\n", *(pkt_data + 48), *(pkt_data + 49));
+        if(*(pkt_data + 48 + offsetNum)){
+            printf("%x%x\n", *(pkt_data + 48+ offsetNum), *(pkt_data + 49+ offsetNum));
         }
         else{printf("%x\n", *(pkt_data + 49));}
 
         printf("NSCOUNT : ");
-        if(*(pkt_data + 50)){
-            printf("%x%x\n", *(pkt_data + 50), *(pkt_data + 51));
+        if(*(pkt_data + 50 + offsetNum)){
+            printf("%x%x\n", *(pkt_data + 50+ offsetNum), *(pkt_data + 51+ offsetNum));
         }
-        else{printf("%x\n", *(pkt_data + 51));}
+        else{printf("%x\n", *(pkt_data + 51+ offsetNum));}
 
         printf("ARCOUNT : ");
-        if(*(pkt_data + 52)){
-            printf("%x%x\n", *(pkt_data + 52), *(pkt_data + 53));
+        if(*(pkt_data + 52 + offsetNum)){
+            printf("%x%x\n", *(pkt_data + 52+ offsetNum), *(pkt_data + 53+ offsetNum));
         }
-        else{printf("%x\n", *(pkt_data + 53));}
+        else{printf("%x\n", *(pkt_data + 53+ offsetNum));}
     }
 }
