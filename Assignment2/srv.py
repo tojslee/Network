@@ -37,12 +37,6 @@ def newClient(serverSocket):
             onlineStatus = '(' + str(clientNums) + ' users online)'
             print('> New user', printFormat, 'entered', onlineStatus)
         
-        #lock.acquire()
-        #forNew = str(addr[0]) + ':' + str(addr[1]) + '|enter|' + str(clientNums)
-        #for socket in clients:
-        #    socket.send(forNew.encode('utf-8'))
-        #lock.release()
-        # send all clients that there is a new online client
         sendThread = threading.Thread(target = send_new, args = (addr, ))
         sendThread.daemon = True
         sendThread.start()
@@ -81,11 +75,6 @@ def receiver(clientSocket):
             sendThread = threading.Thread(target = send_exit, args = (header, ))
             sendThread.daemon = True
             sendThread.start()
-            #lock.acquire()
-            #forExit = header + '|exited|' + str(clientNums)
-            #for socket in clients:
-            #    socket.send(forExit.encode('utf-8'))
-            #lock.release()
             break
         else:
             header = decodedData[:index]
@@ -96,11 +85,6 @@ def receiver(clientSocket):
             sendThread = threading.Thread(target = send_data, args = (header, realData, ))
             sendThread.daemon = True
             sendThread.start()
-            #forData = header + '/' + realData
-            #lock.acquire()
-            #for socket in clients:
-            #    socket.send(forData.encode('utf-8'))
-            #lock.release()
 
 
 # if there is a new client send all clients that there is a new client
@@ -113,6 +97,7 @@ def send_new(addr):
     lock.release()
     return
 
+# if there is any client exited
 def send_exit(header):
     global clientNums, clients
     lock.acquire()
@@ -122,7 +107,7 @@ def send_exit(header):
     lock.release()
     return
 
-
+# if the client has sended the data
 def send_data(header, data):
     global clients
     forData = header + '/' + data
@@ -144,6 +129,7 @@ serverSocket.listen()
 
 print("Chat Server started on port", serverPort)
 
+# try except block for keyboard interrupt
 try:
     setClient = threading.Thread(target = newClient, args =(serverSocket, ))
     setClient.daemon = True

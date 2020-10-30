@@ -5,19 +5,24 @@ import time
 
 clientNums = 0
 
+# for sender thread
 def sender(clientSocket):
     while True:
         data = input()
         sendString = str(clientSocket.getsockname()[0]) + ':' + str(clientSocket.getsockname()[1]) + '/' + data
         clientSocket.send(sendString.encode('utf-8'))
 
+# for receiving thread
 def receiver(clientSocket):
     global clientNums
     while True:
         data = clientSocket.recv(1024)
         decodedData = data.decode('utf-8')
         index = decodedData.find('/')
+
+        # if it is not data received
         if index == -1:
+            # get data from the received line
             index = decodedData.find('|')
             num = decodedData.find('|', index+1)
             signal = decodedData[index + 1:num]
@@ -26,6 +31,8 @@ def receiver(clientSocket):
             descp = addr.find(':')
             sendIP = addr[:descp]
             sendPort = int(addr[descp+1:])
+
+            # if the data is about the client which is receiving the line
             if clientSocket.getsockname()[0] == sendIP and clientSocket.getsockname()[1] == sendPort:
                 if clientNums < 2:
                     numcounter = '(' + str(clientNums) + ' user online)'
@@ -33,7 +40,7 @@ def receiver(clientSocket):
                 else:
                     numcounter = '(' + str(clientNums) + ' users online)'
                     print('> Connected to the chat server', numcounter)
-            else:
+            else: # or else
                 if signal == 'enter':
                     if clientNums < 2:
                         numcounter = '(' + str(clientNums) + ' user online)'
@@ -48,17 +55,18 @@ def receiver(clientSocket):
                     else:
                         numcounter = '(' + str(clientNums) + ' users online)'
                         print('< The user', decodedData[:index], 'left', numcounter)
-        else:
+        else: # the data has been received
             realData = decodedData[index+1:]
             addr = decodedData[:index]
             header = '[' + addr + ']'
             idx = addr.find(':')
             sendIP = addr[:idx]
             sendPort = int(addr[idx+1:])
+            # data from the other client
             if not (clientSocket.getsockname()[0] == sendIP and clientSocket.getsockname()[1] == sendPort):
                 print(header, realData)
-            else:
-                print('[You]' + realData)
+            else: # if the data has sended from this client
+                print("\x1B[F\x1B[2K"+"[You]", realData)
         #break
         
 
@@ -70,7 +78,8 @@ clientPort = int(sys.argv[2])
 clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((clientIP, clientPort))
 
-try:    
+# try except block to catch keyboard interrupt
+try:   
     receiveMessage = threading.Thread(target = receiver, args =(clientSocket, ))
     sendMessage = threading.Thread(target = sender, args = (clientSocket, ))
     receiveMessage.daemon = True
