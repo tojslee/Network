@@ -11,6 +11,7 @@ class aClient:
     request_user_agent = b''
     new_request_first_line = b''
     new_request_user_agent = b''
+    serverSendNum = 0
     web_URL = b''
     def __init__(self, clientSocket, thr, num):
         self.socket = clientSocket
@@ -58,7 +59,6 @@ def substitute_respond(respond):
 def setClient(clientSocket, addr, data):
     global printNum, clients, threads, threadNumber, imageF
     # gather information of client and request for printing data
-    #try:
     # get information
     clientIP = str(addr[0])
     clientPort = str(addr[1])
@@ -79,6 +79,7 @@ def setClient(clientSocket, addr, data):
     web_URL = request_first_line.split(b' ')[1]
     questionMark = web_URL.find(b'?image_off')
     imageon = web_URL.find(b'?image_on')
+
     lock.acquire()
     if questionMark != -1:
         #image filter needed
@@ -131,7 +132,7 @@ def setClient(clientSocket, addr, data):
     new_request_first_line = data.split(b'\n')[0]
     new_user_agent_idx = data.find(b'User-Agent')
     new_user_agent_end = data.find(b'\r\n', user_agent_idx)
-    new_request_user_agent = data[user_agent_idx+12:user_agent_end]
+    new_request_user_agent = data[new_user_agent_idx+12:new_user_agent_end]
 
     # encoding problem
     encoding_idx = data.find(b'Accept-Encoding')
@@ -176,7 +177,6 @@ def sendRequest(clientSocket, data, web_URL):
         respond_temp = proxy_server.recv(8192)
         if b'\r\n\r\n' in respond_temp:
             endedFlag = endedFlag + 1
-        #b"".join([respond, respond_temp])
         respond = respond + respond_temp
         if endedFlag == 2:
             break
@@ -222,8 +222,8 @@ def sendRequest(clientSocket, data, web_URL):
                     return
                 if b'html' in response_mime_type:
                     respond, deleted = substitute_respond(respond)
-                    if new_response_size != 0:
-                        new_response_size = str((int(new_response_size.decode('utf-8'))-deleted)).encode('utf-8')
+                    if new_response_size != b'0':
+                        new_response_size = str(len(respond) - len(rec_header)).encode('utf-8')
 
     clientSocket.send(respond)
 
@@ -233,7 +233,7 @@ def sendRequest(clientSocket, data, web_URL):
         if clients[i].socket == clientSocket:
             for j in range(len(threads)):
                 if threads[j] == clients[i].thread:
-                    print("%d [Conn: %d / %d]"%(printNum, clients[i].threadNum, len(threads)))
+                    #print("%d [Conn: %d / %d]"%(printNum, clients[i].threadNum, len(threads)))
                     printNum = printNum + 1
                     del threads[j]
                     break
@@ -251,7 +251,7 @@ def sendRequest(clientSocket, data, web_URL):
             print(" > %s %sbyte"%(response_mime_type.decode('utf-8'), response_byte.decode('utf-8')))
             print("[CLI <== PRX --- SRV]")
             print(" > %s"%(response_status.decode('utf-8')))
-            #print(" > %s %s"%(response_mime_type.decode('utf-8'), new_response_size.decode('utf-8')))
+            print(" > %s %sbyte"%(response_mime_type.decode('utf-8'), new_response_size.decode('utf-8')))
             print("[CLI disconnected]")
             print("[SRV disconnected]")
             printBar()
@@ -260,9 +260,6 @@ def sendRequest(clientSocket, data, web_URL):
     lock.release()
     proxy_server.close()
     clientSocket.close()
-    #except Exception as e:
-        #print(e)
-        #clientSocket.close()
 
 def newClient(serverSocket):
     global seqNum,clients,threads, threadNumber
