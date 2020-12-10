@@ -5,6 +5,13 @@ import threading
 class aClient:
     urlFilter = 'X'
     imageFilter = 'X'
+    clientPort = str(80)
+    clientIP = str(10)
+    request_first_line = b''
+    request_user_agent = b''
+    new_request_first_line = b''
+    new_request_user_agent = b''
+    web_URL = b''
     def __init__(self, clientSocket, thr, num):
         self.socket = clientSocket
         self.thread = thr
@@ -42,11 +49,10 @@ def substitute_respond(respond):
     deleted = 0
     while idx != -1:
         end_idx = respond.find(b'/>', idx)
-        repsond = respond[:idx] + respond[end_idx+2:]
+        temp = respond[:idx] + respond[end_idx+2:]
         deleted = deleted + end_idx+2-idx
-        idx = respond.find(b'<img', idx+4)
-    print(deleted)
-    print(respond)
+        respond = temp
+        idx = respond.find(b'<img')
     return (respond, deleted)
 
 def setClient(clientSocket, addr, data):
@@ -134,6 +140,25 @@ def setClient(clientSocket, addr, data):
     if gzip_idx != -1:
         data = data[:gzip_idx] + b'utf-8' + data[gzip_idx+4:]
 
+    lock.acquire()
+    for i in range(len(clients)):
+        if clients[i].socket == clientSocket:
+            clients[i].request_first_line = request_first_line
+            clients[i].request_user_agent = request_user_agent
+            clients[i].web_URL = web_URL
+            clients[i].new_request_first_line = new_request_first_line
+            clients[i].new_request_user_agent = new_request_user_agent
+            clients[i].clientIP = clientIP
+            clients[i].clientPort = clientPort
+    lock.release()
+
+    getClient = threading.Thread(target=sendRequest, args=(clientSocket,data, web_URL))
+    getClient.daemon = True
+    getClient.start()
+    getClient.join()
+
+def sendRequest(clientSocket, data, web_URL):
+    global printNum, clients, threads, threadNumber, imageF
     # connect to actual server
     proxy_server = socket(AF_INET, SOCK_STREAM)
     port_idx = web_URL.find(b':')
@@ -144,7 +169,18 @@ def setClient(clientSocket, addr, data):
 
     proxy_server.connect((web_URL, port))
     proxy_server.send(data)
-    respond = proxy_server.recv(8192)
+
+    respond = b''
+    endedFlag = 0
+    while True:
+        respond_temp = proxy_server.recv(8192)
+        if b'\r\n\r\n' in respond_temp:
+            endedFlag = endedFlag + 1
+        #b"".join([respond, respond_temp])
+        respond = respond + respond_temp
+        if endedFlag == 2:
+            break
+
     rec_header = respond.split(b'\r\n\r\n')[0]
 
     # get data
@@ -178,23 +214,16 @@ def setClient(clientSocket, addr, data):
         if clients[i].socket == clientSocket:
             if clients[i].imageFilter == 'O':
                 if b'image' in response_mime_type:
-                    print("image")
-                if b'html' in response_mime_type:
-                    respond, deleted = substitute_respond(respond)
-                    new_response_size = new_response_size-deleted
-                    # header response length modify
                     for j in range(len(threads)):
                         if threads[j] == clients[i].thread:
                             del threads[j]
                             break
                     del clients[i]
                     return
-
-    #if b'text' in response_mime_type:
-    #    print(respond)
-
-
-
+                if b'html' in response_mime_type:
+                    respond, deleted = substitute_respond(respond)
+                    if new_response_size != 0:
+                        new_response_size = str((int(new_response_size.decode('utf-8'))-deleted)).encode('utf-8')
 
     clientSocket.send(respond)
 
@@ -209,14 +238,14 @@ def setClient(clientSocket, addr, data):
                     del threads[j]
                     break
             print("[%c] URL filter | [%c] Image filter\n"%(clients[i].urlFilter, clients[i].imageFilter))
-            print("[CLI connected to %s:%s]"%(clientIP, clientPort))
+            print("[CLI connected to %s:%s]"%(clients[i].clientIP, clients[i].clientPort))
             print("[CLI ==> PRX --- SRV]")
-            print(" > %s"%(request_first_line.decode('utf-8')))
-            print(" > %s"%(request_user_agent.decode('utf-8')))
+            print(" > %s"%(clients[i].request_first_line.decode('utf-8')))
+            print(" > %s"%(clients[i].request_user_agent.decode('utf-8')))
             print("[SRV connected to %s:%d]"%(web_URL.decode('utf-8'), port))
             print("[CLI --- PRX ==> SRV]")
-            print(" > %s"%(new_request_first_line.decode('utf-8')))
-            print(" > %s"%(new_request_user_agent.decode('utf-8')))
+            print(" > %s"%(clients[i].new_request_first_line.decode('utf-8')))
+            print(" > %s"%(clients[i].new_request_user_agent.decode('utf-8')))
             print("[CLI --- PRX <== SRV]")
             print(" > %s"%(response_status.decode('utf-8')))
             print(" > %s %sbyte"%(response_mime_type.decode('utf-8'), response_byte.decode('utf-8')))
